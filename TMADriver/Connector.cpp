@@ -1,8 +1,11 @@
-﻿// Connector.cpp : Implementation of CConnector
+// Connector.cpp : Implementation of CConnector
 
 #include "pch.h"
 #include "Connector.h"
 #include <comdef.h>
+#include <algorithm>
+#include <cctype>
+#include "RlsUdpClient.cpp"
 
 // CConnector
 
@@ -283,7 +286,8 @@ STDMETHODIMP CConnector::setKeyCode(LONG keyCode)
 
 STDMETHODIMP CConnector::setScalesPort(LONG port)
 {
-	client.setScalesPort(port);
+    client.setScalesPort(port);
+    m_rlsClient.setScalesPort(static_cast<int>(port));
 	
 	return S_OK;
 }
@@ -291,8 +295,33 @@ STDMETHODIMP CConnector::setScalesPort(LONG port)
 
 STDMETHODIMP CConnector::setScalesIp(BSTR ip)
 {
-	std::string str = _bstr_t(ip, false);
-	client.setScalesIp(str);
+    std::string str = _bstr_t(ip, false);
+    client.setScalesIp(str);
+    // Detect RLS UDP mode by uri scheme prefix: udp:// or rls://
+    std::string lower = str;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (lower.rfind("udp://", 0) == 0 || lower.rfind("rls://", 0) == 0) {
+        m_useRlsUdp = true;
+        // Strip scheme to leave host
+        std::string host = str.substr(str.find("://") + 3);
+        // Optional host:port parsing
+        size_t colon = host.find(':');
+        if (colon != std::string::npos) {
+            std::string hostOnly = host.substr(0, colon);
+            std::string portStr = host.substr(colon + 1);
+            try {
+                int portNum = std::stoi(portStr);
+                m_rlsClient.setScalesIp(hostOnly);
+                m_rlsClient.setScalesPort(portNum);
+            } catch (...) {
+                m_rlsClient.setScalesIp(host); // keep as-is if port invalid
+            }
+        } else {
+            m_rlsClient.setScalesIp(host);
+        }
+    } else {
+        m_useRlsUdp = false;
+    }
 
 	return S_OK;
 }
@@ -300,22 +329,31 @@ STDMETHODIMP CConnector::setScalesIp(BSTR ip)
 
 STDMETHODIMP CConnector::connectToScales()
 {
-	client.connectToScales();
-	if (client.getException() != "")
-	{
-		return E_FAIL;
-	}
-	else
-	{
-		return S_OK;
-	}
-	return S_OK;
+    if (m_useRlsUdp) {
+        m_rlsClient.connectToScales();
+        if (!m_rlsClient.getException().empty()) return E_FAIL;
+        return S_OK;
+    }
+    client.connectToScales();
+    if (client.getException() != "")
+    {
+        return E_FAIL;
+    }
+    else
+    {
+        return S_OK;
+    }
+    return S_OK;
 }
 
 
 STDMETHODIMP CConnector::uploadPLUToScales()
 {
-	client.addPLUToScales(plu);
+    if (m_useRlsUdp) {
+        m_rlsClient.addPLUToScales(0);
+        return S_OK;
+    }
+    client.addPLUToScales(plu);
 
 	return S_OK;
 }
@@ -323,7 +361,11 @@ STDMETHODIMP CConnector::uploadPLUToScales()
 
 STDMETHODIMP CConnector::uploadPLUKeyBindingsToScales()
 {
-	client.bindPLUToKey(pluKey);
+    if (m_useRlsUdp) {
+        m_rlsClient.bindPLUToKey(0);
+        return S_OK;
+    }
+    client.bindPLUToKey(pluKey);
 
 	return S_OK;
 }
@@ -338,7 +380,11 @@ STDMETHODIMP CConnector::setPLUPrintFormat(LONG printFormat)
 
 STDMETHODIMP CConnector::getException(BSTR* exception)
 {
-	*exception = SysAllocString(CA2W(client.getException().c_str()));
+    if (m_useRlsUdp) {
+        *exception = SysAllocString(CA2W(m_rlsClient.getException().c_str()));
+        return S_OK;
+    }
+    *exception = SysAllocString(CA2W(client.getException().c_str()));
 
 	return S_OK;
 }
@@ -346,7 +392,8 @@ STDMETHODIMP CConnector::getException(BSTR* exception)
 
 STDMETHODIMP CConnector::setSleep(LONG sleep)
 {
-	client.setSleep(sleep);
+    client.setSleep(sleep);
+    m_rlsClient.setSleep(static_cast<int>(sleep));
 
 	return S_OK;
 }
@@ -361,21 +408,34 @@ STDMETHODIMP CConnector::addPLUToQueue()
 
 STDMETHODIMP CConnector::setTime(LONG year, LONG month, LONG day, LONG hour, LONG minute, LONG seconds)
 {
-	client.setTime(year, month, day, hour, minute, seconds);
+    if (m_useRlsUdp) {
+        m_rlsClient.setTime(year, month, day, hour, minute, seconds);
+        return S_OK;
+    }
+    client.setTime(year, month, day, hour, minute, seconds);
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::clearPLU(LONG number)
 {
-	client.clearPLU(number);
+    if (m_useRlsUdp) {
+        m_rlsClient.clearPLU(number);
+        return S_OK;
+    }
+    client.clearPLU(number);
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::getTime(BSTR* time)
 {
-	*time = SysAllocString(CA2W(conventer(client.getTime().c_str()).c_str()));
+    if (m_useRlsUdp) {
+        std::string t = m_rlsClient.getTime();
+        *time = SysAllocString(CA2W(conventer(t.c_str()).c_str()));
+        return S_OK;
+    }
+    *time = SysAllocString(CA2W(conventer(client.getTime().c_str()).c_str()));
 	return S_OK;
 }
 
@@ -396,42 +456,69 @@ STDMETHODIMP CConnector::addPLUKeyToQueue()
 
 STDMETHODIMP CConnector::getScalesAccaunt(LONG number, BSTR* accaunt)
 {
-	*accaunt = SysAllocString(CA2W(conventer(report.getReportText(client.getScalesAccaunt(number)).c_str()).c_str()));
+    if (m_useRlsUdp) {
+        std::string s = m_rlsClient.getScalesAccaunt(number);
+        *accaunt = SysAllocString(CA2W(conventer(report.getReportText(s).c_str()).c_str()));
+        return S_OK;
+    }
+    *accaunt = SysAllocString(CA2W(conventer(report.getReportText(client.getScalesAccaunt(number)).c_str()).c_str()));
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::getSummedScalesAccaunt(LONG number, BSTR* accaunt)
 {
-	*accaunt = SysAllocString(CA2W(conventer(report.getSummaryReport(client.getScalesAccaunt(number)).c_str()).c_str()));
+    if (m_useRlsUdp) {
+        std::string s = m_rlsClient.getScalesAccaunt(number);
+        *accaunt = SysAllocString(CA2W(conventer(report.getSummaryReport(s).c_str()).c_str()));
+        return S_OK;
+    }
+    *accaunt = SysAllocString(CA2W(conventer(report.getSummaryReport(client.getScalesAccaunt(number)).c_str()).c_str()));
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::getInfo(BSTR* info)
 {
-	*info = SysAllocString(CA2W(conventer(client.getInfo().c_str()).c_str()));
+    if (m_useRlsUdp) {
+        std::string s = m_rlsClient.getInfo();
+        *info = SysAllocString(CA2W(conventer(s.c_str()).c_str()));
+        return S_OK;
+    }
+    *info = SysAllocString(CA2W(conventer(client.getInfo().c_str()).c_str()));
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::getMac(BSTR* mac)
 {
-	*mac = SysAllocString(CA2W(conventer(client.getMAC().c_str()).c_str()));
+    if (m_useRlsUdp) {
+        std::string s = m_rlsClient.getMAC();
+        *mac = SysAllocString(CA2W(conventer(s.c_str()).c_str()));
+        return S_OK;
+    }
+    *mac = SysAllocString(CA2W(conventer(client.getMAC().c_str()).c_str()));
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::disconnect()
 {
-	client.disconnect();
+    if (m_useRlsUdp) {
+        m_rlsClient.disconnect();
+        return S_OK;
+    }
+    client.disconnect();
 	return S_OK;
 }
 
 
 STDMETHODIMP CConnector::readTMAFile(BSTR* file)
 {
-	client.readTMAFile((const std::string)_bstr_t(*file, false));
+    if (m_useRlsUdp) {
+        return S_OK; // not applicable for RLS mode
+    }
+    client.readTMAFile((const std::string)_bstr_t(*file, false));
 	return S_OK;
 }
 // Реалізація TMT методів
@@ -456,8 +543,13 @@ STDMETHODIMP CConnector::sendConstTMT(LONG fieldNumber, BSTR value, BSTR* result
 		std::string sValue(size_needed, '\0');
 		WideCharToMultiByte(1251, 0, value, len, &sValue[0], size_needed, NULL, NULL);
 
-		// Відправляємо через клієнт (який далі вже робить CP1251 → UTF8)
-		std::string response = client.sendConstTMT(fieldNumber, sValue);
+        // Route to appropriate client
+        std::string response;
+        if (m_useRlsUdp) {
+            response = m_rlsClient.sendConstTMT(fieldNumber, sValue);
+        } else {
+            response = client.sendConstTMT(fieldNumber, sValue);
+        }
 
 		// Повернення відповіді назад у BSTR (UTF-16)
 		std::wstring wResponse(response.begin(), response.end()); // припускаємо що response — ASCII

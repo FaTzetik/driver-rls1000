@@ -10,6 +10,7 @@
 #include "PLUKey.h"
 #include "Report.h"
 #include "TMAClient.h"
+#include "RlsUdpClient.h"
 
 #if defined(_WIN32_WCE) && !defined(_CE_DCOM) && !defined(_CE_ALLOW_SINGLE_THREADED_OBJECTS_IN_MTA)
 #error "Single-threaded COM objects are not properly supported on Windows CE platform, such as the Windows Mobile platforms that do not include full DCOM support. Define _CE_ALLOW_SINGLE_THREADED_OBJECTS_IN_MTA to force ATL to support creating single-thread COM object's and allow use of it's single-threaded COM object implementations. The threading model in your rgs file was set to 'Free' as that is the only threading model supported in non DCOM Windows CE platforms."
@@ -89,9 +90,12 @@ public:
 		Report report;
 		TMAClient client;
 		std::string CConnector::conventer(const char* str);
-		std::string m_shopName;    // Для поля 0
-		std::string m_deviceName;  // Для поля 1
-		std::string m_currency;    // Для поля 2
+        // RLS UDP transport mode toggle and client
+        bool m_useRlsUdp { false };
+        RlsUdpClient m_rlsClient;
+		std::string m_shopName;    // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ 0
+		std::string m_deviceName;  // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ 1
+		std::string m_currency;    // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ 2
 		std::string ConvertBSTRToString(BSTR bstr)
 		{
 			if (!bstr) return "";
@@ -123,19 +127,19 @@ public:
 	STDMETHOD(readTMAFile)(BSTR* file);
 	STDMETHODIMP sendConstTMT1(BSTR value, BSTR* result) override
 	{
-		// Конвертуємо BSTR в std::string і зберігаємо
+		// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ BSTR пїЅ std::string пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 		m_shopName = ConvertBSTRToString(value);
 		return sendConstTMT(0, value, result);
 	}
 	STDMETHODIMP sendConstTMT2(BSTR value, BSTR* result) override
 	{
-		// Конвертуємо BSTR в std::string і зберігаємо
+		// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ BSTR пїЅ std::string пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 		m_shopName = ConvertBSTRToString(value);
 		return sendConstTMT(0, value, result);
 	}
 	STDMETHODIMP sendConstTMT3(BSTR value, BSTR* result) override
 	{
-		// Конвертуємо BSTR в std::string і зберігаємо
+		// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ BSTR пїЅ std::string пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 		m_shopName = ConvertBSTRToString(value);
 		return sendConstTMT(0, value, result);
 	}
