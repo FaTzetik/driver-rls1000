@@ -1,0 +1,26 @@
+HKCR
+{
+	TMADriver.Connector.1 = s 'Connector class'
+	{
+		CLSID = s '{dd2391f4-0ff8-4f34-9084-ee336bc1f661}'
+	}
+	TMADriver.Connector = s 'Connector class'
+	{		
+		CurVer = s 'TMADriver.Connector.1'
+	}
+	NoRemove CLSID
+	{
+		ForceRemove {dd2391f4-0ff8-4f34-9084-ee336bc1f661} = s 'Connector class'
+		{
+			ProgID = s 'TMADriver.Connector.1'
+			VersionIndependentProgID = s 'TMADriver.Connector'
+			ForceRemove Programmable
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			TypeLib = s '{9df37101-5600-4cc4-9cfd-d90bcb54955e}'
+			Version = s '1.0'
+		}
+	}
+}
